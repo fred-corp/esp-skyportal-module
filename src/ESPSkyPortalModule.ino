@@ -7,10 +7,15 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
-#define RXPIN 22
-#define TXPIN 23
+#define RXPIN 9
+#define TXPIN 8
 #define SELPIN 21
-#define LEDPIN 2
+#define LEDPIN 15
+
+#define NEXSTAR_SERIAL Serial1
+
+#define DEBUG_INOUT
+#define DEBUG
 
 // Replace with your network credentials
 const char* ssid     = "Celestron-F7F";
@@ -103,7 +108,7 @@ void prepareSSRead() {
   pinMode(RXPIN, INPUT_PULLUP);
 }
 
-void WiFiEventConfigureWifi(WiFiEvent_t event, WiFiEventInfo_t info) {
+void WiFiEventConfigureWifi(arduino_event_id_t event, arduino_event_info_t info) {
   // configure...
   #ifdef DEBUG
     Serial.println(WiFi.softAPConfig(local_IP, gateway, subnet) ? "Configured" : "Failed to configure!");
@@ -128,7 +133,7 @@ size_t readAnyStream(Stream *inputStream, const char* descr, char* buffer) {
   size_t totalLeng;
   size_t readLeng;
   inputStream->setTimeout(15);
-  if(inputStream->find(0x3B)) { // timeout returns false after Serial2.setTimout..
+  if(inputStream->find(0x3B)) { // timeout returns false after NEXSTAR_SERIAL.setTimout..
     leng = inputStream->read();
     totalLeng = leng+3;
     buffer[0]=0x3B;
@@ -173,7 +178,7 @@ void writeAnyStream(Stream *outputStream, size_t leng, const char* descr, char* 
 }
 
 void serialEvent2(WiFiClient tcpClients[]) {
-  size_t leng = readAnyStream(&Serial2, "from NS ", output);
+  size_t leng = readAnyStream(&NEXSTAR_SERIAL, "from NS ", output);
   if (leng > 2 && output[2] == 0x20) {
     #ifdef DEBUG_INOUT
       Serial.print("from NS detected echo. ");
@@ -197,9 +202,9 @@ void tcpEvent(WiFiClient *tcpClient) {
     }
     setSelOutput();
     delayMicroseconds(400);
-    writeAnyStream(&Serial2, leng, "from TCP", output);
+    writeAnyStream(&NEXSTAR_SERIAL, leng, "from TCP", output);
     delayMicroseconds(400);
-    Serial2.flush();
+    NEXSTAR_SERIAL.flush();
     setSelInput();
   }
 }
@@ -222,13 +227,13 @@ void setSelInput() {
 void setup() {
   esp_base_mac_addr_set(&mac[0]);
   Serial.begin(115200);
-  Serial2.setTimeout(1000);
+  NEXSTAR_SERIAL.setTimeout(1000);
   tcpServer.setTimeout(1000);
 
   // Connect to Wi-Fi network with SSID and password
   Serial.println("Setting AP (Access Point)...");
 
-  WiFi.onEvent(WiFiEventConfigureWifi, WiFiEvent_t::SYSTEM_EVENT_AP_START);
+  WiFi.onEvent(WiFiEventConfigureWifi, ARDUINO_EVENT_WIFI_AP_START);
 
   // Add the password parameter, if you want the AP (Access Point) to be open
   // WiFi.softAP(ssid, password);
@@ -240,7 +245,7 @@ void setup() {
   tcpServer.setNoDelay(true);
   //tcpServer.setTimeout(5);
 
-  Serial2.begin(19200, SERIAL_8N2, RXPIN, TXPIN);
+  NEXSTAR_SERIAL.begin(19200, SERIAL_8N2, RXPIN, TXPIN);
   prepareSSWrite();
   prepareSSRead();
   setSelInput();
@@ -281,7 +286,7 @@ void loop(){
         tcpEvent(&tcpClients[i]);
       }
 
-      if(Serial2.available() || transmission) {
+      if(NEXSTAR_SERIAL.available() || transmission) {
         noInterrupts();
         transmission = false;
         serialEvent2(tcpClients);
